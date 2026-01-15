@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🐰 萌趣中英文听写助手</title>
+    <title>🐰 萌趣中英文听写助手（优化版）</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -34,6 +34,7 @@
             font-size: 2.2rem; font-weight: bold; color: #264653; margin: 20px 0; padding: 20px;
             background: #f8f9fa; border-radius: 15px; border: 2px dashed #ffc8dd;
             min-height: 120px; display: flex; align-items: center; justify-content: center;
+            line-height: 1.5;
         }
         .timer {
             font-size: 2.2rem; color: #ff758f; margin: 12px 0; font-weight: bold;
@@ -107,14 +108,20 @@
         .debug-info {
             background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px;
             font-family: monospace; font-size: 0.8rem; text-align: left;
-            max-height: 100px; overflow-y: auto;
+            max-height: 100px; overflow-y: auto; display: none;
+        }
+        .voice-status {
+            color: #6a994e; font-size: 0.85rem; margin-top: 5px;
+            padding: 5px 10px; background: #f1faee; border-radius: 8px;
+            display: inline-block;
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1><span>🐰</span> 萌趣中英文听写助手 <span>🐱</span></h1>
-        <p>🌟 智能解析文本｜精准中英文识别｜支持拍照与相册上传</p>
+        <h1><span>🐰</span> 萌趣中英文听写助手（优化版）<span>🐱</span></h1>
+        <p>🌟 智能解析文本｜精准中英文识别｜支持拍照与相册上传｜语音优化</p>
+        <p class="voice-status" id="voiceStatus">语音系统加载中...</p>
     </div>
 
     <div class="main-area">
@@ -135,7 +142,7 @@
         <button id="chooseWordBtn" class="func-btn album-btn">🖼️ 从相册选择图片</button>
         <button id="confirmWordBtn" class="func-btn" disabled>✅ 确认导入短语</button>
         <img id="uploadPreview" class="photo-preview" alt="短语照片预览">
-        <div class="debug-info" id="debugInfo" style="display:none;"></div>
+        <div class="debug-info" id="debugInfo"></div>
         <p class="word-list-tip" id="extractedWordTip">等待提取短语～</p>
     </div>
 
@@ -154,7 +161,8 @@
         1. <b>两种上传方式</b>：每个功能区都有【拍照上传】和【从相册选择】按钮，先用扫描App处理图片再上传，识别效果更佳！<br>
         2. <b>智能文本解析</b>：系统会自动按序号（1. 2. 3.）分割内容，并过滤乱码。<br>
         3. <b>报读模式</b>：点击上方紫色按钮，可在「中文」和「英文」朗读间切换，朗读时会自动过滤词性等无关信息。<br>
-        4. <b>拍照要点</b>：光线充足、对准焦、字迹清晰。</p>
+        4. <b>语音优化</b>：系统已优化中英文语音合成，中文朗读更连贯自然。<br>
+        5. <b>拍照要点</b>：光线充足、对准焦、字迹清晰。</p>
 
     <script>
         // ========== 基础数据 ==========
@@ -183,6 +191,7 @@
         let isRunning = false;
         let uploadPhotoData = null;
         let checkPhotoData = null;
+        let availableVoices = [];
 
         const unit1Pure = unit1.map(w => w.toLowerCase().replace(/[^a-z]/g, ''));
         const unit2Pure = unit2.map(w => w.toLowerCase().replace(/[^a-z]/g, ''));
@@ -199,52 +208,97 @@
         const languageToggleBtn = el('languageToggleBtn'), debugInfo = el('debugInfo');
         const chooseWordBtn = el('chooseWordBtn'), chooseWordFileInput = el('chooseWordFileInput');
         const chooseCheckBtn = el('chooseCheckBtn'), chooseCheckFileInput = el('chooseCheckFileInput');
+        const voiceStatus = el('voiceStatus');
+
+        // ========== 语音初始化 ==========
+        function initSpeechSynthesis() {
+            // 加载可用的语音
+            const loadVoices = () => {
+                availableVoices = window.speechSynthesis.getVoices();
+                if (availableVoices.length > 0) {
+                    const chineseVoices = availableVoices.filter(v => v.lang === 'zh-CN' || v.lang === 'zh-TW');
+                    const englishVoices = availableVoices.filter(v => v.lang.startsWith('en'));
+                    
+                    voiceStatus.innerHTML = `✅ 语音系统已就绪<br>中文语音: ${chineseVoices.length}个 | 英文语音: ${englishVoices.length}个`;
+                    
+                    // 控制台输出可用语音（调试用）
+                    console.log('可用语音列表:');
+                    availableVoices.forEach(v => console.log(`- ${v.name} (${v.lang})`));
+                } else {
+                    voiceStatus.textContent = '⚠️ 未检测到语音引擎，部分功能可能受限';
+                }
+            };
+            
+            // 立即尝试加载
+            loadVoices();
+            
+            // 监听语音列表变化
+            window.speechSynthesis.onvoiceschanged = loadVoices;
+            
+            // 设置超时检查
+            setTimeout(loadVoices, 1000);
+        }
 
         // ========== 【核心】文本智能解析与清洗函数 ==========
         /**
-         * 核心解析函数：正确提取中英文对照的完整句子
+         * 核心解析函数：专门处理中英文混合文本
          */
         function parseRecognitionText(text) {
             let results = [];
-            let rawText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            // 替换常见的OCR错误
+            text = text.replace(/\*\*[A-Z]+\*\*\./g, '')
+                       .replace(/RERET\./g, '')
+                       .replace(/\s+/g, ' ');
             
-            // 方法1：按数字序号分割（如 "1. " "2. " 等）
-            const lines = rawText.split('\n');
-            let currentItem = '';
+            // 方法1：按序号模式分割
+            const itemPattern = /(\d+[\.\)\、]\s*)(.*?)(?=\s*\d+[\.\)\、]|$)/gs;
+            let match;
             
-            for (let line of lines) {
-                line = line.trim();
-                if (!line) continue;
-                
-                // 检测是否是新的序号项
-                const numberMatch = line.match(/^(\d+)[\.\)\、]\s*(.*)$/);
-                if (numberMatch) {
-                    // 保存上一个项目
-                    if (currentItem) {
-                        results.push(cleanRecognitionItem(currentItem));
-                    }
-                    currentItem = numberMatch[2];
-                } else {
-                    // 续接上一行
-                    if (currentItem) {
-                        currentItem += ' ' + line;
-                    } else {
-                        currentItem = line;
+            while ((match = itemPattern.exec(text + '\n999.')) !== null) {
+                let item = match[2].trim();
+                if (item) {
+                    item = cleanRecognitionItem(item);
+                    if (item.length > 5) {
+                        results.push(item);
                     }
                 }
             }
             
-            // 处理最后一个项目
-            if (currentItem) {
-                results.push(cleanRecognitionItem(currentItem));
-            }
-            
-            // 如果没有按序号分割成功，尝试其他方法
+            // 方法2：如果上面失败，按行处理
             if (results.length === 0) {
-                // 按行分割，但过滤掉太短的行
-                results = lines
-                    .map(line => cleanRecognitionItem(line))
-                    .filter(item => item.length > 3 && !item.match(/^[^a-zA-Z\u4e00-\u9fa5]+$/));
+                const lines = text.split('\n');
+                let currentItem = '';
+                
+                for (let i = 0; i < lines.length; i++) {
+                    let line = lines[i].trim();
+                    if (!line) continue;
+                    
+                    // 检查是否是序号行
+                    const isNumberedLine = /^\d+[\.\)\、]/.test(line);
+                    
+                    if (isNumberedLine) {
+                        // 保存上一个
+                        if (currentItem) {
+                            currentItem = cleanRecognitionItem(currentItem);
+                            if (currentItem.length > 5) results.push(currentItem);
+                        }
+                        // 开始新的
+                        currentItem = line.replace(/^\d+[\.\)\、]\s*/, '');
+                    } else {
+                        // 续接行
+                        if (currentItem) {
+                            currentItem += ' ' + line;
+                        } else {
+                            currentItem = line;
+                        }
+                    }
+                }
+                
+                // 最后一个
+                if (currentItem) {
+                    currentItem = cleanRecognitionItem(currentItem);
+                    if (currentItem.length > 5) results.push(currentItem);
+                }
             }
             
             return results;
@@ -256,24 +310,69 @@
         function cleanRecognitionItem(item) {
             if (!item) return '';
             
-            // 移除行首的序号（如果清洗过程中还有残留）
-            let cleaned = item.replace(/^\d+[\.\)\、]\s*/, '');
+            let cleaned = item;
             
-            // 移除OCR常见的乱码字符，但保留正常的标点
-            cleaned = cleaned.replace(/[\[\]\{\}\|\\~`^<>]/g, '');
+            // 1. 移除OCR常见的错误字符和乱码
+            cleaned = cleaned.replace(/\*\*[A-Z]+\*\*\./g, '');  // 移除 **RERET.** 这类乱码
+            cleaned = cleaned.replace(/[|\\<>\[\]{}]/g, '');
             
-            // 压缩多余的空格
-            cleaned = cleaned.replace(/\s+/g, ' ').trim();
+            // 2. 修复中文字符间的空格（中文之间不应该有空格）
+            cleaned = cleaned.replace(/([\u4e00-\u9fa5])\s+([\u4e00-\u9fa5])/g, '$1$2');
             
-            // 修复英文标点前的空格问题
+            // 3. 修复英文标点前的空格问题
             cleaned = cleaned.replace(/\s+([.,?!;:])/g, '$1');
-            cleaned = cleaned.replace(/([a-zA-Z])([.,?!;:])/g, '$1$2');
+            cleaned = cleaned.replace(/([a-zA-Z])\s+([.,?!;:])/g, '$1$2');
             
-            // 确保中英文之间有空格
+            // 4. 确保中英文之间有一个空格
             cleaned = cleaned.replace(/([\u4e00-\u9fa5])([a-zA-Z])/g, '$1 $2');
             cleaned = cleaned.replace(/([a-zA-Z])([\u4e00-\u9fa5])/g, '$1 $2');
             
+            // 5. 压缩多余的空格
+            cleaned = cleaned.replace(/\s+/g, ' ').trim();
+            
+            // 6. 修复常见的OCR识别错误
+            const corrections = {
+                '穿过进来': '穿过照进来',
+                '穿过来': '穿过照进来',
+                '需20分钟': '只需20分钟',
+                '需 20 分钟': '只需20分钟',
+                // 添加其他常见错误修正
+            };
+            
+            Object.keys(corrections).forEach(wrong => {
+                const correct = corrections[wrong];
+                cleaned = cleaned.replace(new RegExp(wrong, 'g'), correct);
+            });
+            
             return cleaned;
+        }
+
+        /**
+         * 预处理中文文本，使其朗读更自然
+         */
+        function preprocessChineseText(text) {
+            let processed = text;
+            
+            // 1. 将数字转换为中文读法（简化版）
+            processed = processed.replace(/(\d+)/g, match => {
+                const num = parseInt(match);
+                if (num >= 0 && num <= 10) {
+                    const chineseNumbers = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+                    return chineseNumbers[num] || match;
+                }
+                return match;
+            });
+            
+            // 2. 处理常见标点
+            processed = processed.replace(/\./g, '。');
+            processed = processed.replace(/\?/g, '？');
+            processed = processed.replace(/!/g, '！');
+            processed = processed.replace(/,/g, '，');
+            
+            // 3. 移除不必要的空格（中文不需要单词间的空格）
+            processed = processed.replace(/\s+/g, '');
+            
+            return processed;
         }
 
         /**
@@ -282,21 +381,25 @@
         function cleanTextForSpeech(text) {
             if (!text) return '';
             
-            // 移除行首序号
-            let cleaned = text.replace(/^\d+[\.\)\、]\s*/, '').trim();
+            let cleaned = text.trim();
             
-            // 如果是中英文对照，根据当前语言模式选择
+            // 移除序号
+            cleaned = cleaned.replace(/^\d+[\.\)\、]\s*/, '');
+            
             if (speechLanguage === 'zh-CN') {
-                // 提取中文部分（最后一个中文片段）
-                const chineseParts = cleaned.match(/[\u4e00-\u9fa5][\u4e00-\u9fa5，。；：？！、]+/g);
-                if (chineseParts && chineseParts.length > 0) {
-                    return chineseParts[chineseParts.length - 1];
+                // 提取中文部分
+                const chineseMatch = cleaned.match(/[\u4e00-\u9fa5][^a-zA-Z]*/g);
+                if (chineseMatch && chineseMatch.length > 0) {
+                    // 合并所有中文部分并预处理
+                    const chineseText = chineseMatch.join('').trim();
+                    return preprocessChineseText(chineseText);
                 }
             } else {
-                // 提取英文部分（第一个英文片段）
-                const englishParts = cleaned.match(/[a-zA-Z][a-zA-Z\s.,?!;:'"-]+/g);
-                if (englishParts && englishParts.length > 0) {
-                    return englishParts[0];
+                // 提取英文部分
+                const englishMatch = cleaned.match(/[a-zA-Z][^[\u4e00-\u9fa5]]*/g);
+                if (englishMatch && englishMatch.length > 0) {
+                    // 合并所有英文部分
+                    return englishMatch.join(' ').trim();
                 }
             }
             
@@ -308,30 +411,73 @@
             const rawPhrase = wordText.trim();
             const cleanedPhrase = cleanTextForSpeech(rawPhrase);
             window.speechSynthesis.cancel();
+            
+            // 三次朗读，间隔1秒
             setTimeout(() => speakWord(cleanedPhrase), 0);
             setTimeout(() => speakWord(cleanedPhrase), 1000);
             setTimeout(() => speakWord(cleanedPhrase), 2000);
         }
 
         function speakWord(word) {
+            if (!word) return;
+            
             const speech = new SpeechSynthesisUtterance(word);
             speech.lang = speechLanguage;
             speech.volume = 1;
-            speech.rate = speechLanguage === 'zh-CN' ? 0.7 : 0.45;
-            speech.pitch = 1;
+            
+            // 根据不同语言调整参数
+            if (speechLanguage === 'zh-CN') {
+                // 中文优化参数
+                speech.rate = 0.8;  // 稍微快一点
+                speech.pitch = 1.0;  // 正常音高
+                
+                // 选择中文语音
+                const chineseVoice = availableVoices.find(v => 
+                    v.lang === 'zh-CN' || v.lang === 'zh-TW' || v.lang === 'zh-HK'
+                );
+                if (chineseVoice) {
+                    speech.voice = chineseVoice;
+                    speech.rate = 0.85; // 中文语音通常可以快一点
+                }
+            } else {
+                // 英文优化参数
+                speech.rate = 0.6;  // 慢一点更清晰
+                speech.pitch = 1.0;
+                
+                // 选择英文语音
+                const englishVoice = availableVoices.find(v => 
+                    v.lang.startsWith('en-') || v.lang === 'en'
+                );
+                if (englishVoice) {
+                    speech.voice = englishVoice;
+                }
+            }
+            
+            // 设置文本
+            speech.text = word;
+            
+            // 开始朗读
             window.speechSynthesis.speak(speech);
         }
 
         function startTimer() {
-            timeLeft = 6; timerDisplay.textContent = timeLeft;
+            timeLeft = 6; 
+            timerDisplay.textContent = timeLeft;
+            
             timerInterval = setInterval(() => {
-                timeLeft--; timerDisplay.textContent = timeLeft;
-                if (timeLeft <= 0) { clearInterval(timerInterval); nextWord(); }
+                timeLeft--; 
+                timerDisplay.textContent = timeLeft;
+                
+                if (timeLeft <= 0) { 
+                    clearInterval(timerInterval); 
+                    nextWord(); 
+                }
             }, 1000);
         }
 
         function nextWord() {
             currentWordIndex++;
+            
             if (currentWordIndex < currentUnit.length) {
                 const phrase = currentUnit[currentWordIndex];
                 wordDisplay.textContent = phrase;
@@ -366,7 +512,7 @@
         uploadWordBtn.addEventListener('click', () => wordFileInput.click());
         wordFileInput.addEventListener('change', handleWordImageFile);
 
-        // 3. 【新增】从相册选择图片 (短语表)
+        // 3. 从相册选择图片 (短语表)
         chooseWordBtn.addEventListener('click', () => chooseWordFileInput.click());
         chooseWordFileInput.addEventListener('change', handleWordImageFile);
 
@@ -393,10 +539,13 @@
                             extractedWordTip.textContent = `⏳ 识别进度: ${Math.round(m.progress * 100)}%`;
                         }
                     },
-                    // 使用更合适的页面分割模式
-                    tessedit_pageseg_mode: '3', // 3 = 自动分割
-                    preserve_interword_spaces: '1', // 保持单词间距
-                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,?!;:\'"()[]{}<>-–—/\\|@#$%^&*+=~` \u4e00-\u9fa5，。；：？！、（）【】「」《》'
+                    // 优化OCR配置
+                    tessedit_pageseg_mode: '3',  // 3 = 自动分割
+                    tessedit_ocr_engine_mode: '1',  // 使用LSTM引擎（对中文更好）
+                    preserve_interword_spaces: '1',  // 保持单词间距
+                    user_defined_dpi: '300',  // 提高DPI
+                    textord_min_linesize: '2.0',  // 最小行尺寸
+                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,?!;:\'"()[]{}- \u4e00-\u9fa5，。；：？！、（）【】《》「」'
                 });
                 
                 // 显示调试信息
@@ -426,19 +575,25 @@
         // 4. 确认导入自定义短语
         confirmWordBtn.addEventListener('click', () => {
             if (customWordList.length === 0) return;
+            
             isCustomMode = true;
             currentUnit = customWordList;
             currentPureList = customWordList.map(w => w.toLowerCase().replace(/[^a-z\u4e00-\u9fa5]/g, ''));
             unitLabel.textContent = `当前：自定义列表（共${customWordList.length}条）`;
             resetBtn.click();
-            alert('🎊 自定义内容导入成功！点击【开始听写】就能使用啦～');
+            
+            // 显示导入成功提示
+            extractedWordTip.innerHTML = `✅ 已成功导入${customWordList.length}条内容！`;
+            setTimeout(() => {
+                alert('🎊 自定义内容导入成功！点击【开始听写】就能使用啦～');
+            }, 300);
         });
 
         // 5. 上传默写纸图片 (拍照)
         takePhotoBtn.addEventListener('click', () => checkFileInput.click());
         checkFileInput.addEventListener('change', handleCheckImageFile);
 
-        // 6. 【新增】从相册选择图片 (默写纸)
+        // 6. 从相册选择图片 (默写纸)
         chooseCheckBtn.addEventListener('click', () => chooseCheckFileInput.click());
         chooseCheckFileInput.addEventListener('change', handleCheckImageFile);
 
@@ -446,6 +601,7 @@
         async function handleCheckImageFile(event) {
             const file = event.target.files[0];
             if (!file) return;
+            
             const reader = new FileReader();
             reader.onload = function(e) {
                 checkPhotoData = e.target.result;
@@ -459,8 +615,14 @@
 
         // 7. 批改功能
         checkBtn.addEventListener('click', async () => {
-            if (!checkPhotoData) { alert('请先上传默写纸图片哦～'); return; }
-            if (currentPureList.length === 0) { alert('请先开始听写或导入短语列表～'); return; }
+            if (!checkPhotoData) { 
+                alert('请先上传默写纸图片哦～'); 
+                return; 
+            }
+            if (currentPureList.length === 0) { 
+                alert('请先开始听写或导入短语列表～'); 
+                return; 
+            }
 
             try {
                 correctResult.innerHTML = '<p class="loading">🔍 正在批改，请稍候...</p>';
@@ -470,11 +632,14 @@
                     tessedit_pageseg_mode: '3',
                     preserve_interword_spaces: '1'
                 });
+                
                 const handWords = parseRecognitionText(text);
 
                 let correctCount = 0;
                 let resultHtml = '';
-                for (let i = 0; i < currentPureList.length && i < handWords.length; i++) {
+                const checkCount = Math.min(currentPureList.length, handWords.length);
+                
+                for (let i = 0; i < checkCount; i++) {
                     const stdPhrase = currentUnit[i];
                     const handPhrase = handWords[i] || '<span style="color:#999">未填写</span>';
                     
@@ -486,6 +651,7 @@
                     if (isCorrect) correctCount++;
                     
                     resultHtml += `第${i+1}题：标准【${stdPhrase}】 → 你的【${handPhrase}】 `;
+                    
                     if(isCustomMode) {
                         resultHtml += `<span>（自定义内容）</span><br>`;
                     } else {
@@ -498,9 +664,10 @@
                 if(isCustomMode && customWordList.some(item => /[\u4e00-\u9fa5]/.test(item))) {
                     accuracyMsg = `📝 共 ${currentPureList.length} 条内容，已显示你的听写结果。`;
                 } else {
-                    const accuracy = Math.round((correctCount / Math.min(currentPureList.length, handWords.length)) * 100);
-                    accuracyMsg = `🏆 批改结果：共 ${Math.min(currentPureList.length, handWords.length)} 题，答对 ${correctCount} 题，正确率 ${accuracy}%！`;
+                    const accuracy = checkCount > 0 ? Math.round((correctCount / checkCount) * 100) : 0;
+                    accuracyMsg = `🏆 批改结果：共 ${checkCount} 题，答对 ${correctCount} 题，正确率 ${accuracy}%！`;
                 }
+                
                 resultHtml += `<div class="accuracy">${accuracyMsg}</div>`;
                 correctResult.innerHTML = resultHtml;
             } catch (err) {
@@ -555,6 +722,22 @@
             checkPhotoData = null;
             confirmWordBtn.disabled = true;
             checkBtn.disabled = true;
+            debugInfo.style.display = 'none';
+        });
+
+        // ========== 页面初始化 ==========
+        document.addEventListener('DOMContentLoaded', function() {
+            // 初始化语音系统
+            initSpeechSynthesis();
+            
+            // 显示当前语音状态
+            setTimeout(() => {
+                if (availableVoices.length === 0) {
+                    voiceStatus.textContent = '⚠️ 语音系统未完全加载，请刷新页面或检查浏览器设置';
+                }
+            }, 2000);
+            
+            console.log('听写助手已初始化完成！');
         });
     </script>
 </body>
