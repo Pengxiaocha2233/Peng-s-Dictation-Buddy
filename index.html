@@ -104,6 +104,11 @@
             background: #f8f9fa; padding: 10px; border-radius: 12px; border: 1px solid #e9ecef;
         }
         .loading { color: #7b66ff; font-weight: bold; }
+        .debug-info {
+            background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px;
+            font-family: monospace; font-size: 0.8rem; text-align: left;
+            max-height: 100px; overflow-y: auto;
+        }
     </style>
 </head>
 <body>
@@ -130,6 +135,7 @@
         <button id="chooseWordBtn" class="func-btn album-btn">🖼️ 从相册选择图片</button>
         <button id="confirmWordBtn" class="func-btn" disabled>✅ 确认导入短语</button>
         <img id="uploadPreview" class="photo-preview" alt="短语照片预览">
+        <div class="debug-info" id="debugInfo" style="display:none;"></div>
         <p class="word-list-tip" id="extractedWordTip">等待提取短语～</p>
     </div>
 
@@ -178,8 +184,8 @@
         let uploadPhotoData = null;
         let checkPhotoData = null;
 
-        const unit1Pure = unit1.map(w => w.toLowerCase());
-        const unit2Pure = unit2.map(w => w.toLowerCase());
+        const unit1Pure = unit1.map(w => w.toLowerCase().replace(/[^a-z]/g, ''));
+        const unit2Pure = unit2.map(w => w.toLowerCase().replace(/[^a-z]/g, ''));
         let currentPureList = unit1Pure;
 
         // ========== DOM 元素 ==========
@@ -190,71 +196,111 @@
         const extractedWordTip = el('extractedWordTip'), takePhotoBtn = el('takePhotoBtn'), checkBtn = el('checkBtn');
         const checkPreview = el('checkPreview'), correctResult = el('correctResult');
         const wordFileInput = el('wordFileInput'), checkFileInput = el('checkFileInput');
-        const languageToggleBtn = el('languageToggleBtn');
-        // 新增：从相册选择的按钮和输入框
+        const languageToggleBtn = el('languageToggleBtn'), debugInfo = el('debugInfo');
         const chooseWordBtn = el('chooseWordBtn'), chooseWordFileInput = el('chooseWordFileInput');
         const chooseCheckBtn = el('chooseCheckBtn'), chooseCheckFileInput = el('chooseCheckFileInput');
 
         // ========== 【核心】文本智能解析与清洗函数 ==========
         /**
-         * 核心解析函数：一站式解决乱码、分割和不完整问题。
+         * 核心解析函数：正确提取中英文对照的完整句子
          */
         function parseRecognitionText(text) {
             let results = [];
-            let rawText = text.replace(/\n+/g, '\n').trim();
-            const itemPattern = /(\d+[\.\)\、]\s*)([\s\S]*?)(?=\s*\d+[\.\)\、]|$)/gi;
-            let match;
-            while ((match = itemPattern.exec(rawText + '\n999.')) !== null) {
-                let fullItem = (match[1] + match[2]).trim();
-                let cleanedItem = cleanRecognitionItem(fullItem);
-                if (cleanedItem.length > 2) {
-                    results.push(cleanedItem);
+            let rawText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            
+            // 方法1：按数字序号分割（如 "1. " "2. " 等）
+            const lines = rawText.split('\n');
+            let currentItem = '';
+            
+            for (let line of lines) {
+                line = line.trim();
+                if (!line) continue;
+                
+                // 检测是否是新的序号项
+                const numberMatch = line.match(/^(\d+)[\.\)\、]\s*(.*)$/);
+                if (numberMatch) {
+                    // 保存上一个项目
+                    if (currentItem) {
+                        results.push(cleanRecognitionItem(currentItem));
+                    }
+                    currentItem = numberMatch[2];
+                } else {
+                    // 续接上一行
+                    if (currentItem) {
+                        currentItem += ' ' + line;
+                    } else {
+                        currentItem = line;
+                    }
                 }
             }
-            if (results.length === 0) {
-                results = rawText.split('\n')
-                                 .map(line => cleanRecognitionItem(line))
-                                 .filter(line => line.length > 2);
+            
+            // 处理最后一个项目
+            if (currentItem) {
+                results.push(cleanRecognitionItem(currentItem));
             }
+            
+            // 如果没有按序号分割成功，尝试其他方法
+            if (results.length === 0) {
+                // 按行分割，但过滤掉太短的行
+                results = lines
+                    .map(line => cleanRecognitionItem(line))
+                    .filter(item => item.length > 3 && !item.match(/^[^a-zA-Z\u4e00-\u9fa5]+$/));
+            }
+            
             return results;
         }
 
         /**
-         * 深度清洗单条识别内容，移除乱码。
+         * 优化后的清洗函数：保留完整的中英文句子
          */
         function cleanRecognitionItem(item) {
-            let cleaned = item;
-            cleaned = cleaned.replace(/\b([b-df-hj-np-tv-z]{1,3}|\w{1,2}[^aeiou\s]){1,3}\b(\s*)/gi, '').trim();
-            cleaned = cleaned.match(/[a-zA-Z0-9\s\.\,\?\!\;:\'\"\(\)\[\]\%\u4e00-\u9fa5，。；：？！“”‘’（）【】]+/g);
-            cleaned = cleaned ? cleaned.join('') : '';
-            cleaned = cleaned.replace(/\s+/g, ' ')
-                             .replace(/([a-zA-Z]) ([\.\,\?\!\;:])/g, '$1$2')
-                             .replace(/([\u4e00-\u9fa5]) ([a-zA-Z])/g, '$1 $2')
-                             .trim();
-            // 可选：移除行首序号，让听写内容更纯净
-            // cleaned = cleaned.replace(/^\d+[\.\)\、]\s*/, '');
-            return cleaned.trim();
+            if (!item) return '';
+            
+            // 移除行首的序号（如果清洗过程中还有残留）
+            let cleaned = item.replace(/^\d+[\.\)\、]\s*/, '');
+            
+            // 移除OCR常见的乱码字符，但保留正常的标点
+            cleaned = cleaned.replace(/[\[\]\{\}\|\\~`^<>]/g, '');
+            
+            // 压缩多余的空格
+            cleaned = cleaned.replace(/\s+/g, ' ').trim();
+            
+            // 修复英文标点前的空格问题
+            cleaned = cleaned.replace(/\s+([.,?!;:])/g, '$1');
+            cleaned = cleaned.replace(/([a-zA-Z])([.,?!;:])/g, '$1$2');
+            
+            // 确保中英文之间有空格
+            cleaned = cleaned.replace(/([\u4e00-\u9fa5])([a-zA-Z])/g, '$1 $2');
+            cleaned = cleaned.replace(/([a-zA-Z])([\u4e00-\u9fa5])/g, '$1 $2');
+            
+            return cleaned;
         }
 
         /**
-         * 清洗朗读文本：去除编号、词性标注、中文释义。
+         * 清洗朗读文本：只去除序号，保留完整句子
          */
         function cleanTextForSpeech(text) {
-            let cleaned = text.trim();
-            cleaned = cleaned.replace(/^\d+\.\s*/, '');
-            cleaned = cleaned.replace(/[a-z]+\.[^a-z]*/gi, '');
-            cleaned = cleaned.replace(/\s+/g, ' ').replace(/[；。，、]/g, ' ').trim();
-            const coreMatch = cleaned.match(/([a-zA-Z]+|[\u4e00-\u9fa5]+)/g);
-            if (coreMatch) {
-                if (speechLanguage === 'zh-CN') {
-                    const chinesePart = coreMatch.find(chunk => /[\u4e00-\u9fa5]/.test(chunk));
-                    cleaned = chinesePart || coreMatch[0];
-                } else {
-                    const englishPart = coreMatch.find(chunk => /[a-zA-Z]/.test(chunk));
-                    cleaned = englishPart || coreMatch[0];
+            if (!text) return '';
+            
+            // 移除行首序号
+            let cleaned = text.replace(/^\d+[\.\)\、]\s*/, '').trim();
+            
+            // 如果是中英文对照，根据当前语言模式选择
+            if (speechLanguage === 'zh-CN') {
+                // 提取中文部分（最后一个中文片段）
+                const chineseParts = cleaned.match(/[\u4e00-\u9fa5][\u4e00-\u9fa5，。；：？！、]+/g);
+                if (chineseParts && chineseParts.length > 0) {
+                    return chineseParts[chineseParts.length - 1];
+                }
+            } else {
+                // 提取英文部分（第一个英文片段）
+                const englishParts = cleaned.match(/[a-zA-Z][a-zA-Z\s.,?!;:'"-]+/g);
+                if (englishParts && englishParts.length > 0) {
+                    return englishParts[0];
                 }
             }
-            return cleaned || text;
+            
+            return cleaned;
         }
 
         // ========== 语音与计时功能 ==========
@@ -347,8 +393,16 @@
                             extractedWordTip.textContent = `⏳ 识别进度: ${Math.round(m.progress * 100)}%`;
                         }
                     },
-                    tessedit_pageseg_mode: '6'
+                    // 使用更合适的页面分割模式
+                    tessedit_pageseg_mode: '3', // 3 = 自动分割
+                    preserve_interword_spaces: '1', // 保持单词间距
+                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,?!;:\'"()[]{}<>-–—/\\|@#$%^&*+=~` \u4e00-\u9fa5，。；：？！、（）【】「」《》'
                 });
+                
+                // 显示调试信息
+                debugInfo.textContent = 'OCR原始结果:\n' + text;
+                debugInfo.style.display = 'block';
+                
                 customWordList = parseRecognitionText(text);
                 customWordList = [...new Set(customWordList)];
 
@@ -412,16 +466,25 @@
                 correctResult.innerHTML = '<p class="loading">🔍 正在批改，请稍候...</p>';
                 const fileInput = checkFileInput.files[0] ? checkFileInput : chooseCheckFileInput;
                 const file = fileInput.files[0];
-                const { data: { text } } = await Tesseract.recognize(file, 'eng+chi_sim', { tessedit_pageseg_mode: '6' });
+                const { data: { text } } = await Tesseract.recognize(file, 'eng+chi_sim', { 
+                    tessedit_pageseg_mode: '3',
+                    preserve_interword_spaces: '1'
+                });
                 const handWords = parseRecognitionText(text);
 
                 let correctCount = 0;
                 let resultHtml = '';
-                for (let i = 0; i < currentPureList.length; i++) {
+                for (let i = 0; i < currentPureList.length && i < handWords.length; i++) {
                     const stdPhrase = currentUnit[i];
                     const handPhrase = handWords[i] || '<span style="color:#999">未填写</span>';
-                    const isCorrect = isCustomMode ? false : (currentPureList[i] === handPhrase.toLowerCase());
+                    
+                    // 简化的匹配逻辑：去除空格和标点后比较
+                    const stdClean = stdPhrase.toLowerCase().replace(/[^a-z\u4e00-\u9fa5]/g, '');
+                    const handClean = handPhrase.toLowerCase().replace(/[^a-z\u4e00-\u9fa5]/g, '');
+                    
+                    const isCorrect = isCustomMode ? false : (stdClean === handClean);
                     if (isCorrect) correctCount++;
+                    
                     resultHtml += `第${i+1}题：标准【${stdPhrase}】 → 你的【${handPhrase}】 `;
                     if(isCustomMode) {
                         resultHtml += `<span>（自定义内容）</span><br>`;
@@ -435,8 +498,8 @@
                 if(isCustomMode && customWordList.some(item => /[\u4e00-\u9fa5]/.test(item))) {
                     accuracyMsg = `📝 共 ${currentPureList.length} 条内容，已显示你的听写结果。`;
                 } else {
-                    const accuracy = Math.round((correctCount / currentPureList.length) * 100);
-                    accuracyMsg = `🏆 批改结果：共 ${currentPureList.length} 题，答对 ${correctCount} 题，正确率 ${accuracy}%！`;
+                    const accuracy = Math.round((correctCount / Math.min(currentPureList.length, handWords.length)) * 100);
+                    accuracyMsg = `🏆 批改结果：共 ${Math.min(currentPureList.length, handWords.length)} 题，答对 ${correctCount} 题，正确率 ${accuracy}%！`;
                 }
                 resultHtml += `<div class="accuracy">${accuracyMsg}</div>`;
                 correctResult.innerHTML = resultHtml;
