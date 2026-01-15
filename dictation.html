@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🐰 萌趣英语短语听写小助手</title>
+    <!-- 关键修复：提前引入 Tesseract.js OCR库 -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "Microsoft YaHei", "幼圆", sans-serif;
+            max-width: 800px; margin: 15px auto; text-align: center;
+            background: linear-gradient(135deg, #fdf6f8 0%, #e9f5ff 100%); padding: 15px;
+        }
+        .header {
+            background: #fff; border-radius: 20px; padding: 18px; margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(255, 182, 193, 0.2); border: 2px solid #ffd1dc;
+        }
+        .header h1 {
+            color: #ff6b9d; font-size: 1.8rem; margin-bottom: 8px;
+            display: flex; align-items: center; justify-content: center; gap: 12px;
+        }
+        .header h1 span { font-size: 2rem; }
+        .header p { color: #6a994e; font-size: 0.95rem; font-weight: 500; }
+        .main-area {
+            background: #fff; border-radius: 25px; padding: 25px 15px; margin: 18px 0;
+            box-shadow: 0 6px 15px rgba(173, 216, 230, 0.3); border: 3px solid #bde0fe;
+        }
+        .unit-label {
+            font-size: 1.2rem; color: #4a7c59; margin-bottom: 12px; font-weight: bold;
+            background: #f1faee; display: inline-block; padding: 5px 15px; border-radius: 30px;
+        }
+        .word-display {
+            font-size: 2.2rem; font-weight: bold; color: #264653; margin: 20px 0; padding: 20px;
+            background: #f8f9fa; border-radius: 15px; border: 2px dashed #ffc8dd;
+        }
+        .timer {
+            font-size: 2.2rem; color: #ff758f; margin: 12px 0; font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(255,117,143,0.2);
+        }
+        .control-btn {
+            padding: 10px 25px; font-size: 1rem; margin: 6px; border: none; border-radius: 30px;
+            cursor: pointer; color: white; font-weight: 500; transition: all 0.3s;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+        }
+        .start-btn { background: #ff9a8b; }
+        .start-btn:hover { background: #ff6b6b; transform: translateY(-2px); }
+        .reset-btn { background: #74c69d; }
+        .reset-btn:hover { background: #52b788; transform: translateY(-2px); }
+        .switch-btn { background: #7b66ff; }
+        .switch-btn:hover { background: #6344ff; transform: translateY(-2px); }
+        .func-area {
+            margin: 20px 0; padding: 20px; background: #fff; border-radius: 20px;
+            box-shadow: 0 4px 12px rgba(255, 218, 185, 0.25); border: 2px solid #fefae0;
+        }
+        .area-title {
+            font-size: 1.3rem; color: #264653; margin-bottom: 15px; font-weight: bold;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        .upload-area .area-title { color: #e76f51; }
+        .upload-area .func-btn { background: #f4a261; }
+        .upload-area .func-btn:hover { background: #e9c46a; transform: scale(1.03); }
+        .check-area .area-title { color: #2a9d8f; }
+        .check-area .func-btn { background: #264653; }
+        .check-area .func-btn:hover { background: #2a9d8f; transform: scale(1.03); }
+        .func-btn {
+            padding: 9px 22px; font-size: 1rem; margin: 6px; border: none; border-radius: 30px;
+            cursor: pointer; color: white; font-weight: 500; transition: all 0.3s;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .func-btn:disabled {
+            background: #d1d1d1; cursor: not-allowed; transform: none;
+        }
+        .photo-preview {
+            max-width: 280px; height: auto; margin: 10px auto; /* 改为自动居中 */
+            border: 3px dashed #ffd6a5; border-radius: 12px; display: none;
+            padding: 5px;
+        }
+        /* 新增：文件上传输入框样式 */
+        .file-input {
+            display: none;
+        }
+        .result-area {
+            margin-top: 18px; text-align: left; max-height: 280px; overflow-y: auto;
+            padding: 15px; background: #f9f9f9; border-radius: 12px; border: 2px solid #e9ecef;
+            font-size: 0.95rem; line-height: 1.6;
+        }
+        .correct { color: #27ae60; font-weight: bold; }
+        .wrong { color: #e74c3c; font-weight: bold; }
+        .accuracy {
+            font-size: 1rem; margin-top: 12px; color: #264653; font-weight: bold;
+            background: #f1faee; padding: 8px 12px; border-radius: 8px; /* 增加内边距 */
+        }
+        .word-list-tip {
+            color: #e76f51; font-size: 0.9rem; margin-top: 10px; padding: 8px 12px; /* 增加内边距 */
+            background: #fff3e6; border-radius: 8px; display: inline-block; max-width: 90%; /* 限制宽度 */
+        }
+        .tip {
+            color: #6c757d; font-size: 0.9rem; margin: 15px 0; line-height: 1.6;
+            background: #f8f9fa; padding: 10px; border-radius: 12px; border: 1px solid #e9ecef;
+        }
+        /* 新增：加载状态 */
+        .loading {
+            color: #7b66ff;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><span>🐰</span> 萌趣英语短语听写小助手 <span>🐱</span></h1>
+        <p>短语慢读3遍+拍照提词+智能批改 超省心～</p>
+    </div>
+
+    <div class="main-area">
+        <div class="unit-label" id="unitLabel">当前：服装短语听写</div>
+        <div class="word-display" id="wordDisplay">准备开始听写啦～</div>
+        <div class="timer" id="timer">6</div>
+        <button id="startBtn" class="control-btn start-btn">🎈 开始听写</button>
+        <button id="resetBtn" class="control-btn reset-btn">🔄 重置</button>
+        <button id="switchUnitBtn" class="control-btn switch-btn">🔖 切换默认短语</button>
+    </div>
+
+    <div class="func-area upload-area">
+        <div class="area-title">📚 家长专属｜上传短语表图片</div>
+        <!-- 修改：用文件选择代替实时摄像头 -->
+        <input type="file" accept="image/*" capture="environment" class="file-input" id="wordFileInput">
+        <button id="uploadWordBtn" class="func-btn">📸 上传短语表图片</button>
+        <button id="confirmWordBtn" class="func-btn" disabled>✅ 确认导入短语</button>
+        <img id="uploadPreview" class="photo-preview" alt="导入短语照片预览">
+        <p class="word-list-tip" id="extractedWordTip">等待提取可爱短语～</p>
+    </div>
+
+    <div class="func-area check-area">
+        <div class="area-title">✍️ 我的听写｜拍照批改出结果</div>
+        <!-- 修改：用文件选择代替实时摄像头 -->
+        <input type="file" accept="image/*" capture="environment" class="file-input" id="checkFileInput">
+        <button id="takePhotoBtn" class="func-btn">📷 上传我的默写纸</button>
+        <button id="checkBtn" class="func-btn" disabled>🌟 开始批改打分</button>
+        <img id="checkPreview" class="photo-preview" alt="批改照片预览">
+        <div class="result-area" id="correctResult"></div>
+    </div>
+
+    <p class="tip">💡 小提示：<br>
+        1. 请使用光线充足、字迹清晰的图片，识别更准确。<br>
+        2. 短语会慢读3遍，每遍间隔1秒，读完有6秒默写时间。<br>
+        3. 批改时，请确保上传的默写答案顺序与听写短语顺序一致。<br>
+        4. 手机要开启浏览器摄像头+网络权限呀！</p>
+
+    <script>
+        // 默认听写列表
+        const unit1 = [
+            "buy pretty clothes", "need a new coat", "a long zip",
+            "some lovely buttons", "a useful pocket", "the blouse with buttons",
+            "the jacket with a zip", "the sweater with pockets", "put on her shoes",
+            "take off the gloves"
+        ];
+        const unit2 = [
+            "wear a dress", "a pair of jeans", "a warm scarf",
+            "a comfortable hat", "tie your shoelaces", "a colorful skirt",
+            "a soft sweater", "a stylish shirt", "put on your socks",
+            "take off your hat"
+        ];
+
+        let currentUnit = unit1;
+        let customWordList = [];
+        let isCustomMode = false;
+        let currentWordIndex = 0;
+        let timerInterval = null;
+        let timeLeft = 6;
+        let isRunning = false;
+        let uploadPhotoData = null;
+        let checkPhotoData = null;
+
+        const unit1Pure = unit1.map(w => w.toLowerCase());
+        const unit2Pure = unit2.map(w => w.toLowerCase());
+        let currentPureList = unit1Pure; // 用于批改比较的列表
+
+        const el = id => document.getElementById(id);
+        const wordDisplay = el('wordDisplay'), timerDisplay = el('timer'), startBtn = el('startBtn');
+        const resetBtn = el('resetBtn'), switchUnitBtn = el('switchUnitBtn'), unitLabel = el('unitLabel');
+        const uploadWordBtn = el('uploadWordBtn'), confirmWordBtn = el('confirmWordBtn'), uploadPreview = el('uploadPreview');
+        const extractedWordTip = el('extractedWordTip'), takePhotoBtn = el('takePhotoBtn'), checkBtn = el('checkBtn');
+        const checkPreview = el('checkPreview'), correctResult = el('correctResult');
+        const wordFileInput = el('wordFileInput'), checkFileInput = el('checkFileInput'); // 新增的文件输入元素
+
+        // 语音朗读函数
+        function readWordThreeTimes(wordText) {
+            const englishPhrase = wordText.trim();
+            window.speechSynthesis.cancel();
+            setTimeout(() => speakWord(englishPhrase), 0);
+            setTimeout(() => speakWord(englishPhrase), 1000);
+            setTimeout(() => speakWord(englishPhrase), 2000);
+        }
+        function speakWord(word) {
+            const speech = new SpeechSynthesisUtterance(word);
+            speech.lang = 'en-US'; speech.volume = 1; speech.rate = 0.45; speech.pitch = 1;
+            window.speechSynthesis.speak(speech);
+        }
+
+        // 计时器函数
+        function startTimer() {
+            timeLeft = 6; timerDisplay.textContent = timeLeft;
+            timerInterval = setInterval(() => {
+                timeLeft--; timerDisplay.textContent = timeLeft;
+                if (timeLeft <= 0) { clearInterval(timerInterval); nextWord(); }
+            }, 1000);
+        }
+
+        // 下一个单词
+        function nextWord() {
+            currentWordIndex++;
+            if (currentWordIndex < currentUnit.length) {
+                const phrase = currentUnit[currentWordIndex];
+                wordDisplay.textContent = phrase;
+                readWordThreeTimes(phrase);
+                startTimer();
+            } else {
+                wordDisplay.textContent = "🎉 听写全部完成啦！";
+                timerDisplay.textContent = "0";
+                isRunning = false;
+                startBtn.disabled = false;
+                confirmWordBtn.disabled = false;
+            }
+        }
+
+        // ==================== 主要修改部分开始 ====================
+        // 1. 上传短语表图片 (替代原摄像头拍照)
+        uploadWordBtn.addEventListener('click', () => {
+            wordFileInput.click(); // 触发隐藏的文件选择框
+        });
+
+        wordFileInput.addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // 预览图片
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                uploadPhotoData = e.target.result;
+                uploadPreview.src = uploadPhotoData;
+                uploadPreview.style.display = 'block';
+                extractedWordTip.textContent = '⏳ 正在识别图片中的短语...';
+                extractedWordTip.classList.add('loading');
+                confirmWordBtn.disabled = true;
+            };
+            reader.readAsDataURL(file);
+
+            // 使用 Tesseract 识别
+            try {
+                // 显示加载状态
+                extractedWordTip.textContent = '⏳ 正在识别图片中的短语...';
+                const { data: { text } } = await Tesseract.recognize(file, 'eng', {
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            extractedWordTip.textContent = `⏳ 识别进度: ${Math.round(m.progress * 100)}%`;
+                        }
+                    }
+                });
+
+                // 处理识别出的文本
+                customWordList = text
+                    .toLowerCase()
+                    .replace(/[^a-z\s]/g, ' ') // 只保留字母和空格
+                    .split(/\n/)
+                    .map(line => line.trim())
+                    .filter(line => line.length >= 5 && /^[a-z\s]+$/.test(line)); // 过滤有效短语
+
+                // 去重
+                customWordList = [...new Set(customWordList)];
+
+                if (customWordList.length > 0) {
+                    extractedWordTip.innerHTML = `✨ 提取成功！共 <strong>${customWordList.length}</strong> 个短语。<br>短语列表：${customWordList.join('、')}`;
+                    extractedWordTip.classList.remove('loading');
+                    confirmWordBtn.disabled = false;
+                } else {
+                    extractedWordTip.textContent = '😥 没有识别到有效的英文短语，请换一张更清晰的图片试试吧～';
+                    extractedWordTip.classList.remove('loading');
+                    confirmWordBtn.disabled = true;
+                }
+            } catch (err) {
+                console.error('OCR Error:', err);
+                extractedWordTip.textContent = '😥 识别失败，请确保网络连接正常并重试。';
+                extractedWordTip.classList.remove('loading');
+                confirmWordBtn.disabled = true;
+            }
+        });
+
+        // 2. 确认导入自定义短语
+        confirmWordBtn.addEventListener('click', () => {
+            if (customWordList.length === 0) return;
+            isCustomMode = true;
+            currentUnit = customWordList;
+            currentPureList = customWordList.map(w => w.toLowerCase());
+            unitLabel.textContent = `当前：自定义短语（共${customWordList.length}个）`;
+            resetBtn.click();
+            alert('🎊 自定义短语导入成功！点击【开始听写】就能使用啦～');
+        });
+
+        // 3. 上传默写纸图片 (替代原摄像头拍照)
+        takePhotoBtn.addEventListener('click', () => {
+            checkFileInput.click();
+        });
+
+        checkFileInput.addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                checkPhotoData = e.target.result;
+                checkPreview.src = checkPhotoData;
+                checkPreview.style.display = 'block';
+                checkBtn.disabled = false;
+                correctResult.innerHTML = '<p class="loading">🖼️ 图片已上传，点击【开始批改打分】进行分析...</p>';
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // 4. 批改功能
+        checkBtn.addEventListener('click', async () => {
+            if (!checkPhotoData) {
+                alert('请先上传默写纸图片哦～');
+                return;
+            }
+            if (currentPureList.length === 0) {
+                alert('请先开始听写或导入短语列表～');
+                return;
+            }
+
+            try {
+                correctResult.innerHTML = '<p class="loading">🔍 正在批改，请稍候...</p>';
+                const file = checkFileInput.files[0];
+                const { data: { text } } = await Tesseract.recognize(file, 'eng');
+
+                const handWords = text
+                    .toLowerCase()
+                    .replace(/[^a-z\s]/g, ' ')
+                    .split(/\n/)
+                    .map(line => line.trim())
+                    .filter(line => line.length >= 2); // 过滤有效行
+
+                let correctCount = 0;
+                let resultHtml = '';
+
+                // 重要：只比较当前列表长度的答案
+                for (let i = 0; i < currentPureList.length; i++) {
+                    const stdPhrase = currentPureList[i];
+                    const handPhrase = handWords[i] || '<span style="color:#999">未填写</span>';
+                    const isCorrect = stdPhrase === handPhrase;
+                    if (isCorrect) correctCount++;
+                    resultHtml += `第${i+1}题：标准答案【${stdPhrase}】 → 你的答案【${handPhrase}】
+                    <span class="${isCorrect?'correct':'wrong'}">${isCorrect?'✅ 正确':'❌ 错误'}</span><br><br>`;
+                }
+
+                const accuracy = Math.round((correctCount / currentPureList.length) * 100);
+                resultHtml += `<div class="accuracy">🏆 批改结果：共 ${currentPureList.length} 题，答对 ${correctCount} 题，正确率 ${accuracy}%！</div>`;
+                correctResult.innerHTML = resultHtml;
+
+            } catch (err) {
+                console.error('Check Error:', err);
+                correctResult.innerHTML = '<p class="wrong">😥 识别失败，请确保图片清晰、光线充足，并且包含完整的默写答案。</p>';
+            }
+        });
+        // ==================== 主要修改部分结束 ====================
+
+        // 其余原有函数（开始、重置、切换单元）保持不变
+        startBtn.addEventListener('click', () => {
+            if (!isRunning && currentUnit.length > 0) {
+                isRunning = true;
+                startBtn.disabled = true;
+                confirmWordBtn.disabled = true;
+                currentWordIndex = 0;
+                const firstPhrase = currentUnit[currentWordIndex];
+                wordDisplay.textContent = firstPhrase;
+                readWordThreeTimes(firstPhrase);
+                startTimer();
+            }
+        });
+
+        resetBtn.addEventListener('click', () => {
+            clearInterval(timerInterval);
+            window.speechSynthesis.cancel();
+            isRunning = false;
+            currentWordIndex = 0;
+            timeLeft = 6;
+            wordDisplay.textContent = "准备开始听写啦～";
+            timerDisplay.textContent = "6";
+            startBtn.disabled = false;
+            confirmWordBtn.disabled = customWordList.length === 0;
+        });
+
+        switchUnitBtn.addEventListener('click', () => {
+            isCustomMode = false;
+            currentUnit = currentUnit === unit1 ? unit2 : unit1;
+            currentPureList = currentUnit === unit1 ? unit1Pure : unit2Pure;
+            unitLabel.textContent = currentUnit === unit1 ? '当前：服装短语听写' : '当前：备用短语听写';
+            resetBtn.click();
+            // 清除预览和结果
+            uploadPreview.style.display = 'none';
+            checkPreview.style.display = 'none';
+            correctResult.innerHTML = '';
+            extractedWordTip.textContent = '等待提取可爱短语～';
+            // 清除文件输入
+            wordFileInput.value = '';
+            checkFileInput.value = '';
+            uploadPhotoData = null;
+            checkPhotoData = null;
+            confirmWordBtn.disabled = true;
+            checkBtn.disabled = true;
+        });
+
+    </script>
+</body>
+</html>
