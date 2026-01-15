@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🐰 萌趣中英文短语听写助手</title>
+    <title>🐰 萌趣中英文听写助手</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -61,16 +61,20 @@
             display: flex; align-items: center; justify-content: center; gap: 10px;
         }
         .upload-area .area-title { color: #e76f51; }
-        .upload-area .func-btn { background: #f4a261; }
-        .upload-area .func-btn:hover { background: #e9c46a; transform: scale(1.03); }
         .check-area .area-title { color: #2a9d8f; }
-        .check-area .func-btn { background: #264653; }
-        .check-area .func-btn:hover { background: #2a9d8f; transform: scale(1.03); }
         .func-btn {
             padding: 9px 22px; font-size: 1rem; margin: 6px; border: none; border-radius: 30px;
             cursor: pointer; color: white; font-weight: 500; transition: all 0.3s;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
+        .upload-area .func-btn { background: #f4a261; }
+        .upload-area .func-btn:hover { background: #e9c46a; transform: scale(1.03); }
+        .upload-area .func-btn.album-btn { background: #38b000; }
+        .upload-area .func-btn.album-btn:hover { background: #2d9100; }
+        .check-area .func-btn { background: #264653; }
+        .check-area .func-btn:hover { background: #2a9d8f; transform: scale(1.03); }
+        .check-area .func-btn.album-btn { background: #38b000; }
+        .check-area .func-btn.album-btn:hover { background: #2d9100; }
         .func-btn:disabled {
             background: #d1d1d1; cursor: not-allowed; transform: none;
         }
@@ -104,8 +108,8 @@
 </head>
 <body>
     <div class="header">
-        <h1><span>🐰</span> 萌趣中英文短语听写助手 <span>🐱</span></h1>
-        <p>🌟 智能净化文本｜精准中英文识别｜自由切换报读语言</p>
+        <h1><span>🐰</span> 萌趣中英文听写助手 <span>🐱</span></h1>
+        <p>🌟 智能解析文本｜精准中英文识别｜支持拍照与相册上传</p>
     </div>
 
     <div class="main-area">
@@ -119,28 +123,32 @@
     </div>
 
     <div class="func-area upload-area">
-        <div class="area-title">📚 拍照提取短语（支持中英文）</div>
+        <div class="area-title">📚 上传/选择短语表图片（支持中英文）</div>
         <input type="file" accept="image/*" capture="environment" class="file-input" id="wordFileInput">
-        <button id="uploadWordBtn" class="func-btn">📸 上传短语表图片</button>
+        <input type="file" accept="image/*" class="file-input" id="chooseWordFileInput">
+        <button id="uploadWordBtn" class="func-btn">📸 拍照上传短语表</button>
+        <button id="chooseWordBtn" class="func-btn album-btn">🖼️ 从相册选择图片</button>
         <button id="confirmWordBtn" class="func-btn" disabled>✅ 确认导入短语</button>
-        <img id="uploadPreview" class="photo-preview" alt="导入短语照片预览">
+        <img id="uploadPreview" class="photo-preview" alt="短语照片预览">
         <p class="word-list-tip" id="extractedWordTip">等待提取短语～</p>
     </div>
 
     <div class="func-area check-area">
-        <div class="area-title">✍️ 我的听写｜拍照批改出结果</div>
+        <div class="area-title">✍️ 上传/选择我的默写纸</div>
         <input type="file" accept="image/*" capture="environment" class="file-input" id="checkFileInput">
-        <button id="takePhotoBtn" class="func-btn">📷 上传我的默写纸</button>
+        <input type="file" accept="image/*" class="file-input" id="chooseCheckFileInput">
+        <button id="takePhotoBtn" class="func-btn">📷 拍照上传默写纸</button>
+        <button id="chooseCheckBtn" class="func-btn album-btn">🖼️ 从相册选择图片</button>
         <button id="checkBtn" class="func-btn" disabled>🌟 开始批改打分</button>
         <img id="checkPreview" class="photo-preview" alt="批改照片预览">
         <div class="result-area" id="correctResult"></div>
     </div>
 
     <p class="tip">💡 使用小提示：<br>
-        1. <b>报读模式</b>：点击上方紫色按钮，可在「中文」和「英文」朗读间切换。<br>
-        2. <b>智能净化</b>：朗读时会自动过滤编号（如“10.”）、词性（如“v.”“n.”）和中文释义。<br>
-        3. <b>精准识别</b>：系统已优化，能自动修复中文词语中间被不当空格断开的问题。<br>
-        4. <b>拍照要点</b>：光线充足、对准焦、字迹清晰，识别效果更佳。</p>
+        1. <b>两种上传方式</b>：每个功能区都有【拍照上传】和【从相册选择】按钮，先用扫描App处理图片再上传，识别效果更佳！<br>
+        2. <b>智能文本解析</b>：系统会自动按序号（1. 2. 3.）分割内容，并过滤乱码。<br>
+        3. <b>报读模式</b>：点击上方紫色按钮，可在「中文」和「英文」朗读间切换，朗读时会自动过滤词性等无关信息。<br>
+        4. <b>拍照要点</b>：光线充足、对准焦、字迹清晰。</p>
 
     <script>
         // ========== 基础数据 ==========
@@ -158,7 +166,7 @@
         ];
 
         // ========== 核心变量 ==========
-        let speechLanguage = 'en-US'; // 语音合成语言：'en-US' 英文, 'zh-CN' 中文
+        let speechLanguage = 'en-US';
         let currentLanguageMode = '英文';
         let currentUnit = unit1;
         let customWordList = [];
@@ -183,56 +191,75 @@
         const checkPreview = el('checkPreview'), correctResult = el('correctResult');
         const wordFileInput = el('wordFileInput'), checkFileInput = el('checkFileInput');
         const languageToggleBtn = el('languageToggleBtn');
+        // 新增：从相册选择的按钮和输入框
+        const chooseWordBtn = el('chooseWordBtn'), chooseWordFileInput = el('chooseWordFileInput');
+        const chooseCheckBtn = el('chooseCheckBtn'), chooseCheckFileInput = el('chooseCheckFileInput');
 
-        // ========== 【新增】核心文本处理函数 ==========
+        // ========== 【核心】文本智能解析与清洗函数 ==========
         /**
-         * 1. 清洗朗读文本：去除编号、词性标注、中文释义，返回纯净的核心单词或中文
-         * 输入示例："10. slide v.滑落 n.滑动；幻灯片"
-         * 输出示例："slide" (英文模式) 或 "滑落" (中文模式)
+         * 核心解析函数：一站式解决乱码、分割和不完整问题。
+         */
+        function parseRecognitionText(text) {
+            let results = [];
+            let rawText = text.replace(/\n+/g, '\n').trim();
+            const itemPattern = /(\d+[\.\)\、]\s*)([\s\S]*?)(?=\s*\d+[\.\)\、]|$)/gi;
+            let match;
+            while ((match = itemPattern.exec(rawText + '\n999.')) !== null) {
+                let fullItem = (match[1] + match[2]).trim();
+                let cleanedItem = cleanRecognitionItem(fullItem);
+                if (cleanedItem.length > 2) {
+                    results.push(cleanedItem);
+                }
+            }
+            if (results.length === 0) {
+                results = rawText.split('\n')
+                                 .map(line => cleanRecognitionItem(line))
+                                 .filter(line => line.length > 2);
+            }
+            return results;
+        }
+
+        /**
+         * 深度清洗单条识别内容，移除乱码。
+         */
+        function cleanRecognitionItem(item) {
+            let cleaned = item;
+            cleaned = cleaned.replace(/\b([b-df-hj-np-tv-z]{1,3}|\w{1,2}[^aeiou\s]){1,3}\b(\s*)/gi, '').trim();
+            cleaned = cleaned.match(/[a-zA-Z0-9\s\.\,\?\!\;:\'\"\(\)\[\]\%\u4e00-\u9fa5，。；：？！“”‘’（）【】]+/g);
+            cleaned = cleaned ? cleaned.join('') : '';
+            cleaned = cleaned.replace(/\s+/g, ' ')
+                             .replace(/([a-zA-Z]) ([\.\,\?\!\;:])/g, '$1$2')
+                             .replace(/([\u4e00-\u9fa5]) ([a-zA-Z])/g, '$1 $2')
+                             .trim();
+            // 可选：移除行首序号，让听写内容更纯净
+            // cleaned = cleaned.replace(/^\d+[\.\)\、]\s*/, '');
+            return cleaned.trim();
+        }
+
+        /**
+         * 清洗朗读文本：去除编号、词性标注、中文释义。
          */
         function cleanTextForSpeech(text) {
             let cleaned = text.trim();
-            // 1. 去除行首数字编号 (如 "10."， "11. ")
             cleaned = cleaned.replace(/^\d+\.\s*/, '');
-            // 2. 去除英文词性标注及紧跟的中文释义 (如 "v.滑落 n.滑动；")
             cleaned = cleaned.replace(/[a-z]+\.[^a-z]*/gi, '');
-            // 3. 去除多余空格和特殊分隔符
             cleaned = cleaned.replace(/\s+/g, ' ').replace(/[；。，、]/g, ' ').trim();
-            // 4. 提取核心：连续的英文字母 或 连续的中文字符
             const coreMatch = cleaned.match(/([a-zA-Z]+|[\u4e00-\u9fa5]+)/g);
             if (coreMatch) {
-                // 根据当前语音模式决定返回英文部分还是中文部分
                 if (speechLanguage === 'zh-CN') {
-                    // 中文模式：优先返回第一个中文字段，若无则返回第一个字段
                     const chinesePart = coreMatch.find(chunk => /[\u4e00-\u9fa5]/.test(chunk));
                     cleaned = chinesePart || coreMatch[0];
                 } else {
-                    // 英文模式：优先返回第一个英文字段，若无则返回第一个字段
                     const englishPart = coreMatch.find(chunk => /[a-zA-Z]/.test(chunk));
                     cleaned = englishPart || coreMatch[0];
                 }
             }
-            return cleaned || text; // 如果清洗后为空，则返回原文本
-        }
-
-        /**
-         * 2. 优化OCR识别出的中文文本：修复中文词语中间不当的空格
-         * 输入示例："幻灯 片识别 效果"
-         * 输出示例："幻灯片识别效果"
-         */
-        function optimizeChineseText(text) {
-            let optimized = text;
-            // 核心：移除连续中文字符之间不必要的空格
-            optimized = optimized.replace(/([\u4e00-\u9fa5])\s+([\u4e00-\u9fa5])/g, '$1$2');
-            // 清理因OCR产生的其他常见非字母数字字符粘连
-            optimized = optimized.replace(/([\u4e00-\u9fa5])[^a-zA-Z0-9\u4e00-\u9fa5\s]+([\u4e00-\u9fa5])/g, '$1$2');
-            return optimized.trim();
+            return cleaned || text;
         }
 
         // ========== 语音与计时功能 ==========
         function readWordThreeTimes(wordText) {
             const rawPhrase = wordText.trim();
-            // 关键：朗读前先清洗文本
             const cleanedPhrase = cleanTextForSpeech(rawPhrase);
             window.speechSynthesis.cancel();
             setTimeout(() => speakWord(cleanedPhrase), 0);
@@ -289,9 +316,16 @@
             }
         });
 
-        // 2. 上传并识别短语表图片
+        // 2. 上传并识别短语表图片 (拍照)
         uploadWordBtn.addEventListener('click', () => wordFileInput.click());
-        wordFileInput.addEventListener('change', async (event) => {
+        wordFileInput.addEventListener('change', handleWordImageFile);
+
+        // 3. 【新增】从相册选择图片 (短语表)
+        chooseWordBtn.addEventListener('click', () => chooseWordFileInput.click());
+        chooseWordFileInput.addEventListener('change', handleWordImageFile);
+
+        // 通用的短语图片处理函数
+        async function handleWordImageFile(event) {
             const file = event.target.files[0];
             if (!file) return;
 
@@ -307,25 +341,19 @@
             reader.readAsDataURL(file);
 
             try {
-                // 【关键修改】使用优化后的语言包和文本处理
                 const { data: { text } } = await Tesseract.recognize(file, 'eng+chi_sim', {
                     logger: m => {
                         if (m.status === 'recognizing text') {
                             extractedWordTip.textContent = `⏳ 识别进度: ${Math.round(m.progress * 100)}%`;
                         }
-                    }
+                    },
+                    tessedit_pageseg_mode: '6'
                 });
-
-                // 【关键修改】对识别出的原始文本进行优化，修复中文空格
-                let optimizedText = optimizeChineseText(text);
-                customWordList = optimizedText
-                    .split(/\n/)
-                    .map(line => line.trim())
-                    .filter(line => line.length >= 1);
-                customWordList = [...new Set(customWordList)]; // 去重
+                customWordList = parseRecognitionText(text);
+                customWordList = [...new Set(customWordList)];
 
                 if (customWordList.length > 0) {
-                    extractedWordTip.innerHTML = `✨ 提取成功！共 <strong>${customWordList.length}</strong> 条内容。<br>前几项：${customWordList.slice(0, 5).join('、')}${customWordList.length > 5 ? '...' : ''}`;
+                    extractedWordTip.innerHTML = `✨ 提取成功！共 <strong>${customWordList.length}</strong> 条内容。<br>示例：${customWordList.slice(0, 3).map((item, idx) => `<br>${idx+1}. ${item}`).join('')}`;
                     extractedWordTip.classList.remove('loading');
                     confirmWordBtn.disabled = false;
                 } else {
@@ -339,9 +367,9 @@
                 extractedWordTip.classList.remove('loading');
                 confirmWordBtn.disabled = true;
             }
-        });
+        }
 
-        // 3. 确认导入自定义短语
+        // 4. 确认导入自定义短语
         confirmWordBtn.addEventListener('click', () => {
             if (customWordList.length === 0) return;
             isCustomMode = true;
@@ -352,9 +380,16 @@
             alert('🎊 自定义内容导入成功！点击【开始听写】就能使用啦～');
         });
 
-        // 4. 上传默写纸图片
+        // 5. 上传默写纸图片 (拍照)
         takePhotoBtn.addEventListener('click', () => checkFileInput.click());
-        checkFileInput.addEventListener('change', async (event) => {
+        checkFileInput.addEventListener('change', handleCheckImageFile);
+
+        // 6. 【新增】从相册选择图片 (默写纸)
+        chooseCheckBtn.addEventListener('click', () => chooseCheckFileInput.click());
+        chooseCheckFileInput.addEventListener('change', handleCheckImageFile);
+
+        // 通用的默写图片处理函数
+        async function handleCheckImageFile(event) {
             const file = event.target.files[0];
             if (!file) return;
             const reader = new FileReader();
@@ -366,23 +401,19 @@
                 correctResult.innerHTML = '<p class="loading">🖼️ 图片已上传，点击【开始批改打分】进行分析...</p>';
             };
             reader.readAsDataURL(file);
-        });
+        }
 
-        // 5. 批改功能
+        // 7. 批改功能
         checkBtn.addEventListener('click', async () => {
             if (!checkPhotoData) { alert('请先上传默写纸图片哦～'); return; }
             if (currentPureList.length === 0) { alert('请先开始听写或导入短语列表～'); return; }
 
             try {
                 correctResult.innerHTML = '<p class="loading">🔍 正在批改，请稍候...</p>';
-                const file = checkFileInput.files[0];
-                // 【关键修改】使用优化后的语言包和文本处理
-                const { data: { text } } = await Tesseract.recognize(file, 'eng+chi_sim');
-                let optimizedText = optimizeChineseText(text);
-                const handWords = optimizedText
-                    .split(/\n/)
-                    .map(line => line.trim())
-                    .filter(line => line.length >= 1);
+                const fileInput = checkFileInput.files[0] ? checkFileInput : chooseCheckFileInput;
+                const file = fileInput.files[0];
+                const { data: { text } } = await Tesseract.recognize(file, 'eng+chi_sim', { tessedit_pageseg_mode: '6' });
+                const handWords = parseRecognitionText(text);
 
                 let correctCount = 0;
                 let resultHtml = '';
@@ -415,7 +446,7 @@
             }
         });
 
-        // 6. 开始听写
+        // 8. 开始听写
         startBtn.addEventListener('click', () => {
             if (!isRunning && currentUnit.length > 0) {
                 isRunning = true;
@@ -429,7 +460,7 @@
             }
         });
 
-        // 7. 重置
+        // 9. 重置
         resetBtn.addEventListener('click', () => {
             clearInterval(timerInterval);
             window.speechSynthesis.cancel();
@@ -442,7 +473,7 @@
             confirmWordBtn.disabled = customWordList.length === 0;
         });
 
-        // 8. 切换默认单元
+        // 10. 切换默认单元
         switchUnitBtn.addEventListener('click', () => {
             isCustomMode = false;
             currentUnit = currentUnit === unit1 ? unit2 : unit1;
@@ -455,6 +486,8 @@
             extractedWordTip.textContent = '等待提取短语～';
             wordFileInput.value = '';
             checkFileInput.value = '';
+            chooseWordFileInput.value = '';
+            chooseCheckFileInput.value = '';
             uploadPhotoData = null;
             checkPhotoData = null;
             confirmWordBtn.disabled = true;
